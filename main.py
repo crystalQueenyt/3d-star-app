@@ -2,7 +2,19 @@ import streamlit as st
 import time
 import os
 from PIL import Image
-import google.generativeai as genai
+from openai import OpenAI # La nueva librería para la IA
+import base64
+import io
+import json
+
+# --- FUNCIÓN DE CONVERSIÓN A BASE64 (Necesaria para la API de OpenAI Vision) ---
+def encode_image_to_base64(image_file):
+    """Convierte un archivo de imagen subido por Streamlit a Base64."""
+    img = Image.open(image_file)
+    buffered = io.BytesIO()
+    # Usamos JPEG para reducir el tamaño del archivo para la API
+    img.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -12,18 +24,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CONFIGURACIÓN DE IA (GEMINI) ---
-# Intentamos conectar la llave secreta
+# --- CONFIGURACIÓN DE IA (OPENAI) ---
 try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    if "OPENAI_API_KEY" in st.secrets:
+        # Usamos la nueva llave guardada
+        client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
         st.session_state.api_ok = True
     else:
         st.session_state.api_ok = False
-except:
+except Exception:
     st.session_state.api_ok = False
 
-# --- ESTÉTICA (CSS) ---
+# --- ESTÉTICA Y DISEÑO (CSS) ---
 def local_css():
     st.markdown("""
     <style>
@@ -53,42 +65,67 @@ if st.session_state.phase == 0:
     with col2:
         st.markdown("<h1 style='text-align: center; font-size: 80px;'>🪐</h1>", unsafe_allow_html=True)
         st.title("3D STAR IA")
-        st.markdown("### Generador de Personajes")
+        st.markdown("### Generador de Perfiles (OpenAI)")
         
         if not st.session_state.api_ok:
-            st.warning("⚠️ OJO: No detecté la API Key en los Secrets. La IA no funcionará.")
+            st.warning("⚠️ OJO: No detecté la llave de OpenAI. La IA no funcionará.")
         
-        if st.button("COMENZAR / START"):
-            set_phase(1)
+        c_btn1, c_btn2 = st.columns(2)
+        with c_btn1:
+            if st.button("ESPAÑOL"):
+                st.session_state.language = 'ES'
+                set_phase(1)
+        with c_btn2:
+            if st.button("ENGLISH"):
+                st.session_state.language = 'EN'
+                set_phase(1)
 
 # --- FASE 1: LABORATORIO (IA) ---
 elif st.session_state.phase == 1:
-    st.title("🧪 LABORATORIO DE IA")
-    st.write("Sube tu dibujo. Gemini lo analizará para crear el perfil.")
+    st.title("🧪 LABORATORIO DE IA (OpenAI)")
+    st.write("Sube tu dibujo. La IA lo analizará para crear el perfil.")
     
     col_up1, col_up2 = st.columns(2)
     with col_up1:
         front_file = st.file_uploader("Vista Frontal", type=['png', 'jpg', 'jpeg'], key="front")
     
-    if st.button("✨ ANALIZAR CON GEMINI ✨", use_container_width=True):
+    # Placeholder for file uploader (removed, as we only need one file for vision analysis)
+    with col_up2:
+        st.markdown("#### 🚀 Ready to Analyze!")
+        st.write("Solo necesitamos la vista frontal para el análisis de IA.")
+    
+    st.markdown("---")
+    
+    if st.button("✨ ANALIZAR CON IA ✨", use_container_width=True):
         if front_file:
-            with st.spinner("🤖 Gemini está mirando tu dibujo..."):
-                try:
-                    # 1. Cargar imagen
-                    image = Image.open(front_file)
-                    
-                    # 2. Llamar a la IA
-                    model = genai.GenerativeModel('gemini-pro-vision')
-                    prompt = "Eres un experto en videojuegos. Analiza este personaje visualmente. Genera un perfil corto estilo RPG: Nombre sugerido, Clase (ej: Guerrero), Elemento (ej: Fuego) y una descripción de personalidad de 2 lineas. Usa formato simple."
-                    
-                    response = model.generate_content([prompt, image])
-                    st.session_state.char_info = response.text
-                    
-                    st.success("¡Análisis Completado!")
-                    time.sleep(2)
-                    set_phase(2)
-                except Exception as e:
-                    st.error(f"Error de conexión: {e}")
+            if st.session_state.api_ok:
+                with st.spinner("🤖 IA Analizando tu dibujo..."):
+                    try:
+                        base64_image = encode_image_to_base64(front_file)
+                        
+                        prompt_text = "Eres un experto en videojuegos. Analiza este personaje y genera un perfil corto estilo RPG: 1. Nombre 2. Clase (Mago, Guerrero, etc.) 3. Elemento (Fuego, Agua, Sombra) 4. Una descripción de personalidad de 2 líneas. Responde solo con el perfil."
+
+                        response = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[
+                                {"role": "system", "content": "Genera el perfil del personaje en el formato solicitado, sin añadir introducciones ni conclusiones. Se breve."},
+                                {"role": "user", "content": [
+                                    {"type": "text", "text": prompt_text},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                                ]}
+                            ]
+                        )
+                        
+                        st.session_state.char_info = response.choices[0].message.content
+                        st.success("¡Análisis Completado!")
+                        time.sleep(2)
+                        set_phase(2)
+                    except Exception as e:
+                        # Error handling for API call (invalid key, etc.)
+                        st.error(f"Error en la llamada a la IA: {e}")
+                        st.error("Revisa que tu clave de OpenAI sea correcta y que no se haya agotado el crédito gratuito.")
+            else:
+                st.error("⚠️ Error: La llave de OpenAI no se cargó correctamente en Streamlit Secrets.")
         else:
             st.warning("⚠️ Sube al menos la imagen frontal.")
 
@@ -113,9 +150,9 @@ elif st.session_state.phase == 2:
         
     with c2:
         st.markdown('<div class="generated-info">', unsafe_allow_html=True)
-        st.subheader("🧠 ANÁLISIS DE GEMINI:")
+        st.subheader("🧠 ANÁLISIS DE LA IA:")
         # Aquí mostramos lo que escribió la IA
-        st.write(st.session_state.char_info)
+        st.markdown(st.session_state.char_info)
         st.markdown('</div>', unsafe_allow_html=True)
         
     st.button("💾 GUARDAR PERSONAJE", use_container_width=True)
