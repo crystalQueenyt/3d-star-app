@@ -155,4 +155,10 @@ elif st.session_state.phase == 2:
         st.markdown(st.session_state.char_info)
         st.markdown('</div>', unsafe_allow_html=True)
         
-    st.button("💾 GUARDAR PERSONAJE", use_container_width=True)
+    if st.button("💾 GUARDAR PERSONAJE", use_container_width=True):
+        # 1. Muestra un mensaje de confirmación
+        st.toast("✅ Personaje guardado (Simulado)!")
+        
+        # 2. Transiciona a la Fase 3
+        time.sleep(1)
+        set_phase(3)
