@@ -78,7 +78,7 @@ elif st.session_state.phase == 1:
                     image = Image.open(front_file)
                     
                     # 2. Llamar a la IA
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-pro')
                     prompt = "Eres un experto en videojuegos. Analiza este personaje visualmente. Genera un perfil corto estilo RPG: Nombre sugerido, Clase (ej: Guerrero), Elemento (ej: Fuego) y una descripción de personalidad de 2 lineas. Usa formato simple."
                     
                     response = model.generate_content([prompt, image])
